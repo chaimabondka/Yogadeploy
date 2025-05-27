@@ -1,4 +1,3 @@
-```python
 # streamlit_app.py
 import os
 import streamlit as st
@@ -88,10 +87,8 @@ with col1:
         if st.button("Analyser ma posture"):
             pose, conf = classify_pose(arr)
             user_kp = extract_pose_landmarks(bgr)
-            # télécharger et lire image de référence
             ref_url = ref_images.get(pose)
             r = requests.get(ref_url, stream=True)
-            ref_arr = None
             if r.status_code == 200:
                 tmp = np.frombuffer(r.content, np.uint8)
                 ref = cv2.imdecode(tmp, cv2.IMREAD_COLOR)
@@ -100,8 +97,10 @@ with col1:
             else:
                 sim_score = None
             st.session_state.update({
-                "pose":pose, "conf":conf,
-                "sim_score":sim_score, "analyzed":True
+                "pose": pose,
+                "conf": conf,
+                "sim_score": sim_score,
+                "analyzed": True
             })
 
 with col2:
@@ -113,16 +112,12 @@ with col2:
             st.progress(st.session_state['sim_score']/100)
         else:
             st.error("Impossible de calculer le score de similarité.")
-        # Conseils
         tips = {
-            'downdog': [
-                "- Alignez mains et épaules",
-                "- Poussez hanches vers le haut"
-            ],
-            'tree': ["- Regard fixe","- Engagez le core"],
-            'warrior2': ["- Genou aligné à la cheville","- Bras parallèles"],
-            'plank': ["- Corps en ligne droite","- Engagez abdos"],
-            'goddess': ["- Genoux sur chevilles","- Engagez le core"]
+            'downdog': ["- Alignez mains et épaules", "- Poussez hanches vers le haut"],
+            'tree': ["- Regard fixe", "- Engagez le core"],
+            'warrior2': ["- Genou aligné à la cheville", "- Bras parallèles"],
+            'plank': ["- Corps en ligne droite", "- Engagez abdos"],
+            'goddess': ["- Genoux sur chevilles", "- Engagez le core"]
         }
         for tip in tips.get(st.session_state['pose'], []):
             st.markdown(tip)
@@ -131,4 +126,3 @@ with col2:
 
 st.markdown("---")
 st.markdown("_Application prête pour classification et évaluation des postures de yoga._")
-```

@@ -1,137 +1,134 @@
+```python
+# streamlit_app.py
+import os
 import streamlit as st
 import numpy as np
 from PIL import Image
 import tensorflow as tf
 import mediapipe as mp
+import cv2
+import requests
 
-# Configuration de la page
+# --- Configuration Streamlit ---
 st.set_page_config(
     page_title="Analyse de Postures de Yoga",
     page_icon="🧘‍♀️",
     layout="wide"
 )
 
-# Charger le modèle MobileNetV2 personnalisé
+# --- Charger le modèle MobileNetV2 personnalisé ---
 @st.cache_resource
 def load_classification_model():
-    # Assurez-vous d'avoir placé 'yoga_mobilenetv2.h5' à la racine du repo
-    return tf.keras.models.load_model("yoga_mobilenetv2.h5")
+    path = os.path.join(os.getcwd(), "mobilenetv2_yoga_postures.h5")
+    if not os.path.exists(path):
+        st.error("Modèle introuvable: mobilenetv2_yoga_postures.h5")
+        st.stop()
+    return tf.keras.models.load_model(path)
 
 model = load_classification_model()
 class_names = ["downdog", "goddess", "plank", "tree", "warrior2"]
 
-# Initialiser MediaPipe Pose
+# --- Initialiser MediaPipe Pose ---
 mp_pose = mp.solutions.pose
 @st.cache_resource
-def create_pose_detector():
+def get_pose_detector():
     return mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
 
-pose_detector = create_pose_detector()
+pose_detector = get_pose_detector()
 
-# Fonctions métier
-
-def classify_pose(img_array):
-    # Préparer le batch
-    x = np.expand_dims(img_array, axis=0)
-    preds = model.predict(x)
-    idx = np.argmax(preds[0])
-    confidence = float(preds[0][idx]) * 100
-    return class_names[idx], confidence
-
-
-def compute_pose_score(img_array):
-    # Convertir en BGR et uint8
-    image_bgr = (img_array * 255).astype(np.uint8)[..., ::-1]
-    results = pose_detector.process(image_bgr)
+# --- Fonctions utilitaires ---
+def extract_pose_landmarks(image: np.ndarray) -> np.ndarray:
+    """Retourne un tableau (33,2) des keypoints normalisés ou None."""
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    results = pose_detector.process(rgb)
     if not results.pose_landmarks:
-        return 0.0
+        return None
     lm = results.pose_landmarks.landmark
+    return np.array([[p.x, p.y] for p in lm])
 
-    def angle(a, b, c):
-        va = np.array([a.x - b.x, a.y - b.y])
-        vc = np.array([c.x - b.x, c.y - b.y])
-        cosang = np.dot(va, vc) / (np.linalg.norm(va) * np.linalg.norm(vc))
-        return np.degrees(np.arccos(np.clip(cosang, -1, 1)))
 
-    # Exemple pour planche: angle épaule-hanche-genou gauche
-    left_angle = angle(
-        lm[mp_pose.PoseLandmark.LEFT_SHOULDER],
-        lm[mp_pose.PoseLandmark.LEFT_HIP],
-        lm[mp_pose.PoseLandmark.LEFT_KNEE]
-    )
-    target = 180
-    score = max(0, 100 - abs(left_angle - target))
-    return score
+def compute_similarity_score(user_kp: np.ndarray, ref_kp: np.ndarray) -> float:
+    if user_kp is None or ref_kp is None:
+        return 0.0
+    m = min(len(user_kp), len(ref_kp))
+    dists = np.linalg.norm(user_kp[:m] - ref_kp[:m], axis=1)
+    avg = np.mean(dists)
+    score = max(0.0, 100.0 - avg * 1000.0)
+    return round(score, 1)
 
-# Interface utilisateur
-col1, col2 = st.columns([1, 1])
+# Dictionnaire des images de référence (URL ou fichier local)
+ref_images = {
+    "downdog": "https://.../Downdog-Ref.jpg",
+    "goddess": "https://.../Goddess-Ref.jpg",
+    "plank": "https://.../Plank-Ref.jpg",
+    "tree": "https://.../Tree-Ref.jpg",
+    "warrior2": "https://.../Warrior2-Ref.jpg"
+}
 
+# --- Fonctions d'inférence ---
+def classify_pose(img_array: np.ndarray) -> tuple[str, float]:
+    x = np.expand_dims(img_array, 0)
+    preds = model.predict(x)
+    idx = int(np.argmax(preds[0]))
+    conf = float(preds[0][idx]) * 100.0
+    return class_names[idx], conf
+
+# --- UI Streamlit ---
+st.title("Analyse de Postures de Yoga 🧘‍♀️")
+st.markdown("Téléchargez une photo de votre posture pour obtenir classification et score de similarité.")
+
+col1, col2 = st.columns(2)
 with col1:
-    st.subheader("Téléchargez votre image")
-    uploaded_file = st.file_uploader("Choisissez une image de posture de yoga", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Image téléchargée", use_column_width=True)
-        img_array = np.array(image.resize((224, 224))) / 255.0
+    file = st.file_uploader("Choisissez une image (jpg/png)", type=["jpg", "jpeg", "png"])
+    if file:
+        image = Image.open(file).convert("RGB")
+        st.image(image, use_column_width=True, caption="Image téléchargée")
+        arr = np.array(image.resize((224,224))) / 255.0
+        bgr = cv2.cvtColor((arr*255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         if st.button("Analyser ma posture"):
-            with st.spinner("Analyse en cours..."):
-                pose_name, confidence = classify_pose(img_array)
-                score = compute_pose_score(img_array)
-                st.session_state.update({
-                    "pose_name": pose_name,
-                    "confidence": confidence,
-                    "score": score,
-                    "analyzed": True
-                })
+            pose, conf = classify_pose(arr)
+            user_kp = extract_pose_landmarks(bgr)
+            # télécharger et lire image de référence
+            ref_url = ref_images.get(pose)
+            r = requests.get(ref_url, stream=True)
+            ref_arr = None
+            if r.status_code == 200:
+                tmp = np.frombuffer(r.content, np.uint8)
+                ref = cv2.imdecode(tmp, cv2.IMREAD_COLOR)
+                ref_kp = extract_pose_landmarks(ref)
+                sim_score = compute_similarity_score(user_kp, ref_kp)
+            else:
+                sim_score = None
+            st.session_state.update({
+                "pose":pose, "conf":conf,
+                "sim_score":sim_score, "analyzed":True
+            })
 
 with col2:
-    st.subheader("Résultats de l'analyse")
     if st.session_state.get("analyzed", False):
-        st.markdown(f"### Posture détectée: **{st.session_state['pose_name'].capitalize()}**")
-        st.markdown(f"Confiance: {st.session_state['confidence']:.1f}%")
-        st.markdown("### Score de qualité")
-        prog = st.progress(st.session_state['score']/100)
-        color = 'green' if st.session_state['score'] >= 80 else 'orange' if st.session_state['score'] >= 60 else 'red'
-        st.markdown(f"<h1 style='text-align: center; color: {color};'>{st.session_state['score']:.1f}/100</h1>", unsafe_allow_html=True)
-        if st.session_state['score'] >= 80:
-            st.success("Excellent! Votre posture est très bien exécutée.")
-        elif st.session_state['score'] >= 60:
-            st.warning("Bien! Votre posture est correcte mais peut être améliorée.")
+        st.subheader("Résultats")
+        st.write(f"**Posture détectée:** {st.session_state['pose'].capitalize()} ({st.session_state['conf']:.1f}%)")
+        if st.session_state['sim_score'] is not None:
+            st.write(f"**Score de similarité:** {st.session_state['sim_score']}/100")
+            st.progress(st.session_state['sim_score']/100)
         else:
-            st.error("À améliorer. Essayez d'ajuster votre posture selon les principes du yoga.")
+            st.error("Impossible de calculer le score de similarité.")
         # Conseils
-        mapping = {
+        tips = {
             'downdog': [
-                "- Assurez-vous que vos mains sont à la largeur des épaules",
-                "- Poussez vos hanches vers le haut et l'arrière",
-                "- Gardez votre dos droit et vos talons près du sol"
+                "- Alignez mains et épaules",
+                "- Poussez hanches vers le haut"
             ],
-            'tree': [
-                "- Fixez votre regard sur un point fixe pour l'équilibre",
-                "- Gardez votre hanche ouverte et votre genou pointé vers l'extérieur",
-                "- Engagez votre core pour plus de stabilité"
-            ],
-            'warrior2': [
-                "- Alignez votre genou avant avec votre cheville",
-                "- Gardez vos bras parallèles au sol",
-                "- Ouvrez votre poitrine et regardez au-dessus de votre main avant"
-            ],
-            'plank': [
-                "- Gardez votre corps en ligne droite de la tête aux talons",
-                "- Engagez vos abdominaux et vos jambes",
-                "- Répartissez votre poids uniformément entre vos mains et vos orteils"
-            ],
-            'goddess': [
-                "- Gardez vos genoux au-dessus de vos chevilles",
-                "- Tournez vos genoux vers l'extérieur dans la direction de vos orteils",
-                "- Engagez votre core et gardez votre dos droit"
-            ]
+            'tree': ["- Regard fixe","- Engagez le core"],
+            'warrior2': ["- Genou aligné à la cheville","- Bras parallèles"],
+            'plank': ["- Corps en ligne droite","- Engagez abdos"],
+            'goddess': ["- Genoux sur chevilles","- Engagez le core"]
         }
-        for line in mapping.get(st.session_state['pose_name'], []):
-            st.markdown(line)
+        for tip in tips.get(st.session_state['pose'], []):
+            st.markdown(tip)
     else:
-        st.info("Téléchargez une image et cliquez sur 'Analyser ma posture' pour voir les résultats ici.")
+        st.info("Téléchargez une image et cliquez sur 'Analyser ma posture'.")
 
-# Pied de page
 st.markdown("---")
-st.markdown("Application développée pour l'analyse et l'évaluation des postures de yoga")
+st.markdown("_Application prête pour classification et évaluation des postures de yoga._")
+```

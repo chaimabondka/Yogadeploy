@@ -37,7 +37,7 @@ pose_detector = get_pose_detector()
 
 # --- Fonctions utilitaires ---
 def extract_pose_landmarks(image: np.ndarray) -> np.ndarray:
-    """Retourne un tableau (33,2) des keypoints normalisés ou None."""
+    # Convertir BGR en RGB pour MediaPipe
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     results = pose_detector.process(rgb)
     if not results.pose_landmarks:
@@ -55,7 +55,7 @@ def compute_similarity_score(user_kp: np.ndarray, ref_kp: np.ndarray) -> float:
     score = max(0.0, 100.0 - avg * 1000.0)
     return round(score, 1)
 
-# Dictionnaire des images de référence (URL ou fichier local)
+# Dictionnaire des images de référence (URL ou chemins locaux)
 ref_images = {
     "downdog": "https://.../Downdog-Ref.jpg",
     "goddess": "https://.../Goddess-Ref.jpg",
@@ -64,7 +64,7 @@ ref_images = {
     "warrior2": "https://.../Warrior2-Ref.jpg"
 }
 
-# --- Fonctions d'inférence ---
+# --- Classification de posture ---
 def classify_pose(img_array: np.ndarray) -> tuple[str, float]:
     x = np.expand_dims(img_array, 0)
     preds = model.predict(x)
@@ -72,7 +72,7 @@ def classify_pose(img_array: np.ndarray) -> tuple[str, float]:
     conf = float(preds[0][idx]) * 100.0
     return class_names[idx], conf
 
-# --- UI Streamlit ---
+# --- Interface utilisateur ---
 st.title("Analyse de Postures de Yoga 🧘‍♀️")
 st.markdown("Téléchargez une photo de votre posture pour obtenir classification et score de similarité.")
 
@@ -88,20 +88,18 @@ with col1:
             pose, conf = classify_pose(arr)
             user_kp = extract_pose_landmarks(bgr)
             ref_url = ref_images.get(pose)
-            r = requests.get(ref_url, stream=True)
-            if r.status_code == 200:
-                tmp = np.frombuffer(r.content, np.uint8)
-                ref = cv2.imdecode(tmp, cv2.IMREAD_COLOR)
-                ref_kp = extract_pose_landmarks(ref)
-                sim_score = compute_similarity_score(user_kp, ref_kp)
-            else:
-                sim_score = None
-            st.session_state.update({
-                "pose": pose,
-                "conf": conf,
-                "sim_score": sim_score,
-                "analyzed": True
-            })
+            sim_score = None
+            if ref_url:
+                r = requests.get(ref_url, stream=True)
+                if r.status_code == 200:
+                    tmp = np.frombuffer(r.content, np.uint8)
+                    ref = cv2.imdecode(tmp, cv2.IMREAD_COLOR)
+                    ref_kp = extract_pose_landmarks(ref)
+                    sim_score = compute_similarity_score(user_kp, ref_kp)
+            st.session_state["pose"] = pose
+            st.session_state["conf"] = conf
+            st.session_state["sim_score"] = sim_score
+            st.session_state["analyzed"] = True
 
 with col2:
     if st.session_state.get("analyzed", False):

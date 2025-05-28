@@ -22,7 +22,12 @@ def load_classification_model():
     if not os.path.exists(path):
         st.error("Modèle introuvable: mobilenetv2_yoga_postures.keras")
         st.stop()
-    return tf.keras.models.load_model(path)
+        
+    try:
+        return tf.keras.models.load_model(path)
+    except Exception as e:
+        st.error(f"Erreur de chargement du modèle : {type(e).__name__} - {e}")
+        st.stop()
 
 model = load_classification_model()
 class_names = ["downdog", "goddess", "plank", "tree", "warrior2"]

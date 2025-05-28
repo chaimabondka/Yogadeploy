@@ -7,7 +7,6 @@ import tensorflow as tf
 import mediapipe as mp
 import cv2
 import requests
-from tensorflow.keras.engine.functional import Functional as TF_Functional
 
 
 # --- Configuration Streamlit ---
@@ -25,14 +24,14 @@ def load_classification_model():
         st.error("Modèle introuvable: mobilenetv2_yoga_postures.keras")
         st.stop()
         
-    try:
-        return tf.keras.models.load_model(path,
-        custom_objects={
-            'Functional': TF_Functional
-        })
+  try:
+        # Essaye juste de charger le modèle sans custom_objects
+        model = tf.keras.models.load_model(path)
+        return model
     except Exception as e:
         st.error(f"Erreur de chargement du modèle : {type(e).__name__} - {e}")
         st.stop()
+
 
 model = load_classification_model()
 class_names = ["downdog", "goddess", "plank", "tree", "warrior2"]

@@ -14,7 +14,7 @@ st.set_page_config(
 # Chargement du modèle avec cache
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("mobilenetv2_yoga_postures.h5")
+    return tf.keras.models.load_model("models/mobilenetv2_yoga_postures.h5")
 
 model = load_model()
 

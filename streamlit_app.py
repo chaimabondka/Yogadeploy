@@ -24,7 +24,10 @@ def load_classification_model():
         st.stop()
         
     try:
-        return tf.keras.models.load_model(path)
+        return tf.keras.models.load_model(path,
+        custom_objects={
+            'Functional': TF_Functional
+        })
     except Exception as e:
         st.error(f"Erreur de chargement du modèle : {type(e).__name__} - {e}")
         st.stop()

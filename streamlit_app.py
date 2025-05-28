@@ -18,9 +18,9 @@ st.set_page_config(
 # --- Charger le modèle MobileNetV2 personnalisé ---
 @st.cache_resource
 def load_classification_model():
-    path = os.path.join(os.getcwd(), "mobilenetv2_yoga_postures.h5")
+    path = os.path.join(os.getcwd(), "mobilenetv2_yoga_postures.keras")
     if not os.path.exists(path):
-        st.error("Modèle introuvable: mobilenetv2_yoga_postures.h5")
+        st.error("Modèle introuvable: mobilenetv2_yoga_postures.keras")
         st.stop()
     return tf.keras.models.load_model(path)
 

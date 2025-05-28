@@ -8,7 +8,6 @@ import mediapipe as mp
 import cv2
 import requests
 
-
 # --- Configuration Streamlit ---
 st.set_page_config(
     page_title="Analyse de Postures de Yoga",
@@ -24,15 +23,14 @@ def load_classification_model():
         st.error("Modèle introuvable: mobilenetv2_yoga_postures.keras")
         st.stop()
         
-  try:
+    try:
         # Essaye juste de charger le modèle sans custom_objects
         model = tf.keras.models.load_model(path)
         return model
     except Exception as e:
         st.error(f"Erreur de chargement du modèle : {type(e).__name__} - {e}")
         st.stop()
-
-
+        
 model = load_classification_model()
 class_names = ["downdog", "goddess", "plank", "tree", "warrior2"]
 

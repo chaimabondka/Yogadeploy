@@ -7,6 +7,8 @@ import tensorflow as tf
 import mediapipe as mp
 import cv2
 import requests
+from tensorflow.keras.engine.functional import Functional as TF_Functional
+
 
 # --- Configuration Streamlit ---
 st.set_page_config(
